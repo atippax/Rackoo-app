@@ -21,6 +21,10 @@ Run `docker compose up --build` and open http://localhost:3000. The container mo
 
 Use `.env.development.local` for local development overrides and `.env.test.local` for test-only values. Example files are committed as `.env.development.example` and `.env.test.example`; keep secrets in ignored `.env.*.local` files.
 
+## Send pairing results to a LINE group
+
+Set `RACKOO_API_URL` to the deployed rackoo-api Worker URL and `NEXT_PUBLIC_LINE_LIFF_ID` to the LIFF app ID. Enable the `chat_message.write` scope for the LIFF app, then open `/send-to-group` from that app's link inside the target LINE group. The page sends the generated Flex message to the current chat as the user who opened it.
+
 ## UI components
 
 Add shadcn/ui components with the shadcn CLI. Component source lives in `src/components/ui`; shared design tokens live in `src/app/globals.css`.
