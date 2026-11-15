@@ -98,10 +98,12 @@ export function SendToGroupFlow() {
 
     const liff = window.liff;
     if (!isLiffReady || !isGroupChat || !liff) {
+      setProgress("หยุดก่อนเรียก API: หน้านี้ไม่ได้เปิดจากกลุ่ม LINE ที่รองรับ");
       setError("กรุณาเปิดลิงก์นี้จากแชตกลุ่มใน LINE ก่อนส่ง");
       return;
     }
     if (!liff.isApiAvailable("sendMessages")) {
+      setProgress("หยุดก่อนเรียก API: LINE ไม่อนุญาตให้ส่งข้อความจากหน้าที่เปิดอยู่นี้");
       setError("LIFF ส่งข้อความในแชตนี้ไม่ได้ กรุณาเปิดจากลิงก์ในกลุ่มอีกครั้ง");
       return;
     }
@@ -111,11 +113,14 @@ export function SendToGroupFlow() {
     setIsSent(false);
     setProgress("กำลังส่งข้อความไปสร้างผลจับคู่…");
 
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
     try {
       const response = await fetch("/api/send-to-group", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text: text.trim() }),
+        signal: controller.signal,
       });
       const responseText = await response.text();
       let responseBody: unknown;
@@ -139,8 +144,11 @@ export function SendToGroupFlow() {
       const message = sendError instanceof Error ? sendError.message : "ส่งผลจับคู่ไม่สำเร็จ ลองอีกครั้ง";
       console.error("[send-to-group] Send flow failed", sendError);
       setProgress("ส่งไม่สำเร็จ");
-      setError(message);
+      setError(sendError instanceof DOMException && sendError.name === "AbortError"
+        ? "เรียก Rackoo API เกิน 20 วินาที ตรวจสอบ Vercel Functions Logs แล้วลองใหม่"
+        : message);
     } finally {
+      window.clearTimeout(timeout);
       setIsSending(false);
     }
   }
