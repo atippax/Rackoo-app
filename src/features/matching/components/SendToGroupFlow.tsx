@@ -101,18 +101,28 @@ export function SendToGroupFlow() {
       return;
     }
 
-    setButtonFeedback("รับคำสั่งแล้ว กำลังตรวจสอบ LINE…");
+    setButtonFeedback("รับคำสั่งแล้ว กำลังตรวจ LIFF พร้อมส่งหรือไม่…");
     const liff = window.liff;
     if (!isLiffReady || !isGroupChat || !liff) {
       setProgress("หยุดก่อนเรียก API: หน้านี้ไม่ได้เปิดจากกลุ่ม LINE ที่รองรับ");
-      setButtonFeedback("กดปุ่มแล้ว แต่ยังเรียก API ไม่ได้ เพราะไม่ได้เปิดจากกลุ่ม LINE ที่รองรับ");
-      setError("กรุณาเปิดลิงก์นี้จากแชตกลุ่มใน LINE ก่อนส่ง");
+      setButtonFeedback(`หยุดก่อนเรียก API: LIFF=${isLiffReady ? "พร้อม" : "ยังไม่พร้อม"}, chat=${chatType ?? "ไม่ทราบ"}`);
+      setError("กรุณาเปิด LIFF URL จากภายในกลุ่ม LINE โดยตรง แล้วลองอีกครั้ง");
       return;
     }
-    if (!liff.isApiAvailable("sendMessages")) {
+    let canSendMessages: boolean;
+    try {
+      canSendMessages = liff.isApiAvailable("sendMessages");
+    } catch (liffError) {
+      const reason = liffError instanceof Error ? liffError.message : String(liffError);
+      setProgress("ตรวจสอบสิทธิ์ส่งข้อความของ LIFF ไม่สำเร็จ");
+      setButtonFeedback("LIFF SDK ขัดข้องก่อนเรียก API");
+      setError(reason);
+      return;
+    }
+    if (!canSendMessages) {
       setProgress("หยุดก่อนเรียก API: LINE ไม่อนุญาตให้ส่งข้อความจากหน้าที่เปิดอยู่นี้");
       setButtonFeedback("กดปุ่มแล้ว แต่ LIFF ไม่มีสิทธิ์ส่งข้อความในแชตนี้");
-      setError("LIFF ส่งข้อความในแชตนี้ไม่ได้ กรุณาเปิดจากลิงก์ในกลุ่มอีกครั้ง");
+      setError("LIFF ไม่มีสิทธิ์ sendMessages ในหน้านี้ ตรวจสอบ scope chat_message.write และให้เปิดจาก LIFF URL ในกลุ่ม LINE โดยตรง");
       return;
     }
 
