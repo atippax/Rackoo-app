@@ -51,6 +51,7 @@ export function SendToGroupFlow() {
   const [isSent, setIsSent] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [progress, setProgress] = useState("กำลังโหลด LINE LIFF…");
+  const [buttonFeedback, setButtonFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     if (!scriptLoaded) return;
@@ -94,16 +95,23 @@ export function SendToGroupFlow() {
 
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSending || !text.trim()) return;
+    if (isSending) return;
+    if (!text.trim()) {
+      setButtonFeedback("วางข้อความประกาศก่อน แล้วกดปุ่มส่งครับ");
+      return;
+    }
 
+    setButtonFeedback("รับคำสั่งแล้ว กำลังตรวจสอบ LINE…");
     const liff = window.liff;
     if (!isLiffReady || !isGroupChat || !liff) {
       setProgress("หยุดก่อนเรียก API: หน้านี้ไม่ได้เปิดจากกลุ่ม LINE ที่รองรับ");
+      setButtonFeedback("กดปุ่มแล้ว แต่ยังเรียก API ไม่ได้ เพราะไม่ได้เปิดจากกลุ่ม LINE ที่รองรับ");
       setError("กรุณาเปิดลิงก์นี้จากแชตกลุ่มใน LINE ก่อนส่ง");
       return;
     }
     if (!liff.isApiAvailable("sendMessages")) {
       setProgress("หยุดก่อนเรียก API: LINE ไม่อนุญาตให้ส่งข้อความจากหน้าที่เปิดอยู่นี้");
+      setButtonFeedback("กดปุ่มแล้ว แต่ LIFF ไม่มีสิทธิ์ส่งข้อความในแชตนี้");
       setError("LIFF ส่งข้อความในแชตนี้ไม่ได้ กรุณาเปิดจากลิงก์ในกลุ่มอีกครั้ง");
       return;
     }
@@ -112,6 +120,7 @@ export function SendToGroupFlow() {
     setError(null);
     setIsSent(false);
     setProgress("กำลังส่งข้อความไปสร้างผลจับคู่…");
+    setButtonFeedback("กำลังเรียก Rackoo API เพื่อจับคู่…");
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 20_000);
@@ -137,13 +146,16 @@ export function SendToGroupFlow() {
       if (!message) throw new Error("API ส่งผลจับคู่กลับมาในรูปแบบที่ไม่ถูกต้อง");
 
       setProgress("สร้างผลจับคู่แล้ว กำลังส่ง Flex เข้าแชต LINE…");
+      setButtonFeedback("ได้ผลจับคู่แล้ว กำลังส่งเข้า LINE…");
       await liff.sendMessages([message]);
       setIsSent(true);
       setProgress("ส่ง Flex เข้าแชต LINE แล้ว");
+      setButtonFeedback("ส่งเข้า LINE สำเร็จ");
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : "ส่งผลจับคู่ไม่สำเร็จ ลองอีกครั้ง";
       console.error("[send-to-group] Send flow failed", sendError);
       setProgress("ส่งไม่สำเร็จ");
+      setButtonFeedback("ส่งไม่สำเร็จ ดูรายละเอียดด้านล่าง");
       setError(sendError instanceof DOMException && sendError.name === "AbortError"
         ? "เรียก Rackoo API เกิน 20 วินาที ตรวจสอบ Vercel Functions Logs แล้วลองใหม่"
         : message);
@@ -176,7 +188,6 @@ export function SendToGroupFlow() {
           </label>
           <textarea
             id="pairing-announcement"
-            required
             maxLength={20000}
             rows={12}
             value={text}
@@ -184,6 +195,7 @@ export function SendToGroupFlow() {
               setText(event.target.value);
               setError(null);
               setIsSent(false);
+              setButtonFeedback(null);
               if (isLiffReady) setProgress(isGroupChat ? "พร้อมส่งเข้ากลุ่มนี้" : "เปิดหน้านี้จาก LIFF link ในกลุ่ม LINE เพื่อส่งกลับเข้ากลุ่ม");
             }}
             placeholder="วางประกาศสนามและรายชื่อสมาชิกที่นี่"
@@ -193,13 +205,15 @@ export function SendToGroupFlow() {
           <p role="status" aria-live="polite" className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
             {progress}
           </p>
-          {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
+          {buttonFeedback ? <p role={error ? "alert" : "status"} aria-live="polite" className={`rounded-xl px-3 py-2 text-sm ${error ? "bg-red-50 text-red-700" : "bg-sky-50 text-sky-800"}`}>{buttonFeedback}</p> : null}
+          {error ? <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
           {isSent ? <p role="status" className="text-sm font-medium text-emerald-700">ส่งผลจับคู่เข้ากลุ่มแล้ว</p> : null}
 
           <button
             type="submit"
-            disabled={isSending || !text.trim()}
-            className="flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={isSending}
+            aria-disabled={isSending}
+            className="flex min-h-14 w-full touch-manipulation items-center justify-center rounded-xl bg-primary px-4 text-base font-semibold text-white shadow-md transition-colors hover:bg-primary/90 active:scale-[0.99] active:bg-primary/80 disabled:cursor-wait disabled:opacity-65"
           >
             {isSending ? "กำลังจับคู่และส่ง…" : "จับคู่และส่งเข้ากลุ่ม"}
           </button>
