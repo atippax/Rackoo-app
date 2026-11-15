@@ -12,7 +12,6 @@ type LineFlexMessage = {
 type LiffClient = {
   init: (options: { liffId: string }) => Promise<void>;
   getContext: () => { type: string } | null;
-  isApiAvailable: (apiName: string) => boolean;
   sendMessages: (messages: LineFlexMessage[]) => Promise<void>;
 };
 
@@ -40,6 +39,15 @@ function readFlexMessage(value: unknown): LineFlexMessage | null {
 function readApiError(value: unknown): string | null {
   if (!isRecord(value) || typeof value.error !== "string") return null;
   return value.error;
+}
+
+function readLiffError(value: unknown): string {
+  if (!isRecord(value)) return value instanceof Error ? value.message : "ส่งข้อความเข้า LINE ไม่สำเร็จ";
+
+  const code = typeof value.code === "string" || typeof value.code === "number" ? String(value.code) : null;
+  const message = typeof value.message === "string" ? value.message : "ส่งข้อความเข้า LINE ไม่สำเร็จ";
+  if (code === "403") return "LINE ปฏิเสธการส่งข้อความ (403): ตรวจสอบว่า LIFF เปิด scope chat_message.write และเปิดหน้านี้จาก LIFF URL ภายในกลุ่มโดยตรง";
+  return code ? `LINE ส่งข้อความไม่สำเร็จ (${code}): ${message}` : message;
 }
 
 export function SendToGroupFlow() {
@@ -109,23 +117,6 @@ export function SendToGroupFlow() {
       setError("กรุณาเปิด LIFF URL จากภายในกลุ่ม LINE โดยตรง แล้วลองอีกครั้ง");
       return;
     }
-    let canSendMessages: boolean;
-    try {
-      canSendMessages = liff.isApiAvailable("sendMessages");
-    } catch (liffError) {
-      const reason = liffError instanceof Error ? liffError.message : String(liffError);
-      setProgress("ตรวจสอบสิทธิ์ส่งข้อความของ LIFF ไม่สำเร็จ");
-      setButtonFeedback("LIFF SDK ขัดข้องก่อนเรียก API");
-      setError(reason);
-      return;
-    }
-    if (!canSendMessages) {
-      setProgress("หยุดก่อนเรียก API: LINE ไม่อนุญาตให้ส่งข้อความจากหน้าที่เปิดอยู่นี้");
-      setButtonFeedback("กดปุ่มแล้ว แต่ LIFF ไม่มีสิทธิ์ส่งข้อความในแชตนี้");
-      setError("LIFF ไม่มีสิทธิ์ sendMessages ในหน้านี้ ตรวจสอบ scope chat_message.write และให้เปิดจาก LIFF URL ในกลุ่ม LINE โดยตรง");
-      return;
-    }
-
     setIsSending(true);
     setError(null);
     setIsSent(false);
@@ -162,8 +153,8 @@ export function SendToGroupFlow() {
       setProgress("ส่ง Flex เข้าแชต LINE แล้ว");
       setButtonFeedback("ส่งเข้า LINE สำเร็จ");
     } catch (sendError) {
-      const message = sendError instanceof Error ? sendError.message : "ส่งผลจับคู่ไม่สำเร็จ ลองอีกครั้ง";
-      console.error("[send-to-group] Send flow failed", sendError);
+      const message = readLiffError(sendError);
+      console.error("[send-to-group] Send flow failed", message);
       setProgress("ส่งไม่สำเร็จ");
       setButtonFeedback("ส่งไม่สำเร็จ ดูรายละเอียดด้านล่าง");
       setError(sendError instanceof DOMException && sendError.name === "AbortError"
